@@ -4,6 +4,14 @@ import { Search, Plus, FileText } from "lucide-react";
 import StatsCard from "../components/dashboard/StatsCard";
 import InvoiceRow from "../components/invoices/InvoiceRow";
 import InvoiceForm from "../components/invoices/InvoiceForm";
+import {
+  fetchInvoices,
+  createInvoice,
+  updateInvoice,
+  deleteInvoice,
+} from "../api/invoices";
+import { fetchClients } from "../api/clients";
+import { fetchProjects } from "../api/projects";
 
 export default function Invoices() {
   const [invoices, setInvoices] = useState([]);
@@ -21,88 +29,68 @@ export default function Invoices() {
 
   const loadData = async () => {
     try {
-      const mockClients = [
-        { id: 1, company: "ABC Corp" },
-        { id: 2, company: "XYZ Trading" },
-      ];
+      setLoading(true);
 
-      const mockProjects = [
-        { id: 1, name: "Solar Installation" },
-        { id: 2, name: "Electrical Upgrade" },
-      ];
+      const [invoicesData, clientsData, projectsData] = await Promise.all([
+        fetchInvoices(),
+        fetchClients(),
+        fetchProjects(),
+      ]);
 
-      const mockInvoices = [
-        {
-          id: 1,
-          invoice_number: "INV-001",
-          client_id: 1,
-          project_id: 1,
-          issue_date: "2026-04-01",
-          due_date: "2026-04-15",
-          amount: 25000,
-          status: "sent",
-        },
-        {
-          id: 2,
-          invoice_number: "INV-002",
-          client_id: 2,
-          project_id: 2,
-          issue_date: "2026-03-25",
-          due_date: "2026-04-05",
-          amount: 18000,
-          status: "paid",
-        },
-      ];
-
-      setInvoices(mockInvoices);
-      setClients(mockClients);
-      setProjects(mockProjects);
+      setInvoices(Array.isArray(invoicesData) ? invoicesData : []);
+      setClients(Array.isArray(clientsData) ? clientsData : []);
+      setProjects(Array.isArray(projectsData) ? projectsData : []);
     } catch (error) {
-      console.error(error);
+      console.error("Failed to load invoices data:", error);
+      setInvoices([]);
+      setClients([]);
+      setProjects([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSave = (data) => {
-    if (editingInvoice) {
-      setInvoices((prev) =>
-        prev.map((invoice) =>
-          invoice.id === editingInvoice.id
-            ? { ...invoice, ...data }
-            : invoice
-        )
-      );
-    } else {
-      setInvoices((prev) => [
-        ...prev,
-        {
-          id: Date.now(),
-          ...data,
-        },
-      ]);
+  const handleSave = async (data) => {
+    try {
+      if (editingInvoice) {
+        await updateInvoice(editingInvoice.id, data);
+      } else {
+        await createInvoice(data);
+      }
+
+      await loadData();
+      setShowForm(false);
+      setEditingInvoice(null);
+    } catch (error) {
+      console.error("Failed to save invoice:", error);
+      alert("Failed to save invoice.");
     }
-
-    setShowForm(false);
-    setEditingInvoice(null);
   };
 
-  const handleMarkPaid = (invoice) => {
-    setInvoices((prev) =>
-      prev.map((item) =>
-        item.id === invoice.id ? { ...item, status: "paid" } : item
-      )
-    );
+  const handleMarkPaid = async (invoice) => {
+    try {
+      await updateInvoice(invoice.id, { status: "paid" });
+      await loadData();
+    } catch (error) {
+      console.error("Failed to mark invoice as paid:", error);
+      alert("Failed to update invoice.");
+    }
   };
 
-  const handleDelete = (invoice) => {
+  const handleDelete = async (invoice) => {
     const confirmed = window.confirm(
       "Are you sure you want to delete this invoice?"
     );
 
     if (!confirmed) return;
 
-    setInvoices((prev) => prev.filter((item) => item.id !== invoice.id));
+    try {
+      await deleteInvoice(invoice.id);
+      await loadData();
+    } catch (error) {
+      console.error("Failed to delete invoice:", error);
+      alert("Failed to delete invoice.");
+    }
   };
 
   const getClientName = (clientId) => {
@@ -114,8 +102,8 @@ export default function Invoices() {
     const clientName = getClientName(invoice.client_id);
 
     const matchesSearch =
-      invoice.invoice_number
-        ?.toLowerCase()
+      String(invoice.invoice_number || "")
+        .toLowerCase()
         .includes(search.toLowerCase()) ||
       clientName.toLowerCase().includes(search.toLowerCase());
 
@@ -131,7 +119,7 @@ export default function Invoices() {
     outstanding: invoices.filter((i) =>
       ["sent", "overdue"].includes(i.status)
     ).length,
-    totalValue: invoices.reduce((sum, i) => sum + (i.amount || 0), 0),
+    totalValue: invoices.reduce((sum, i) => sum + Number(i.amount || 0), 0),
   };
 
   if (loading) {
@@ -160,7 +148,10 @@ export default function Invoices() {
         </div>
 
         <button
-          onClick={() => setShowForm(true)}
+          onClick={() => {
+            setEditingInvoice(null);
+            setShowForm(true);
+          }}
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
         >
           <Plus className="w-4 h-4" />
@@ -174,7 +165,7 @@ export default function Invoices() {
         <StatsCard title="Outstanding" value={stats.outstanding} icon={FileText} />
         <StatsCard
           title="Total Value"
-          value={`$${stats.totalValue.toLocaleString()}`}
+          value={`₱${stats.totalValue.toLocaleString()}`}
           icon={FileText}
         />
       </div>
@@ -213,7 +204,10 @@ export default function Invoices() {
             Create your first invoice to get started
           </p>
           <button
-            onClick={() => setShowForm(true)}
+            onClick={() => {
+              setEditingInvoice(null);
+              setShowForm(true);
+            }}
             className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg inline-flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />

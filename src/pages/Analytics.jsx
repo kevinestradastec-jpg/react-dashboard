@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
   CheckCircle,
@@ -20,7 +20,7 @@ import {
   Cell,
 } from "recharts";
 import StatsCard from "../components/dashboard/StatsCard";
-import { fetchProjects, fetchTasks, fetchInvoices } from "../api/api";
+import { fetchProjects } from "../api/projects";
 
 const COLORS = ["#8B5CF6", "#3B82F6", "#10B981", "#F59E0B"];
 
@@ -37,15 +37,13 @@ export default function Analytics() {
 
   const loadData = async () => {
     try {
-      const [projectsData, tasksData, invoicesData] = await Promise.all([
-        fetchProjects(),
-        fetchTasks(),
-        fetchInvoices(),
-      ]);
+      setLoading(true);
+
+      const projectsData = await fetchProjects();
 
       setProjects(Array.isArray(projectsData) ? projectsData : []);
-      setTasks(Array.isArray(tasksData) ? tasksData : []);
-      setInvoices(Array.isArray(invoicesData) ? invoicesData : []);
+      setTasks([]); // placeholder until Tasks page is migrated
+      setInvoices([]); // placeholder until Invoices page is migrated
     } catch (error) {
       console.error("Failed to load analytics data:", error);
       setProjects([]);
@@ -56,28 +54,39 @@ export default function Analytics() {
     }
   };
 
-  const normalizedProjects = projects.map((p) => ({
-    id: p.ProjectId || "",
-    name: p.ProjectName || "Untitled Project",
-    status: normalizeProjectStatus(p.Status),
-    budget: Number(p.Budget || 0),
-    deadline: p.Deadline || "",
-    createdAt: p.CreatedAt || "",
-    clientName: p.ClientName || "",
-    spreadsheetId: p.ProjectSpreadsheetId || "",
-  }));
+  const normalizedProjects = useMemo(
+    () =>
+      projects.map((p) => ({
+        id: p.id || "",
+        name: p.name || "Untitled Project",
+        status: normalizeProjectStatus(p.status),
+        budget: Number(p.budget || 0),
+        deadline: p.deadline || "",
+        createdAt: p.raw?.created_at || "",
+        clientName: p.clientName || "",
+      })),
+    [projects]
+  );
 
-  const normalizedTasks = tasks.map((t) => ({
-    status: String(t.status || t.Status || "").toLowerCase(),
-    priority: String(t.priority || t.Priority || "").toLowerCase(),
-    createdDate: t.created_date || t.CreatedDate || t.createdAt || "",
-    updatedDate: t.updated_date || t.UpdatedDate || t.updatedAt || "",
-  }));
+  const normalizedTasks = useMemo(
+    () =>
+      tasks.map((t) => ({
+        status: String(t.status || t.Status || "").toLowerCase(),
+        priority: String(t.priority || t.Priority || "").toLowerCase(),
+        createdDate: t.created_date || t.CreatedDate || t.createdAt || "",
+        updatedDate: t.updated_date || t.UpdatedDate || t.updatedAt || "",
+      })),
+    [tasks]
+  );
 
-  const normalizedInvoices = invoices.map((i) => ({
-    status: String(i.status || i.Status || "").toLowerCase(),
-    amount: Number(i.amount || i.Amount || 0),
-  }));
+  const normalizedInvoices = useMemo(
+    () =>
+      invoices.map((i) => ({
+        status: String(i.status || i.Status || "").toLowerCase(),
+        amount: Number(i.amount || i.Amount || 0),
+      })),
+    [invoices]
+  );
 
   const activeProjects = normalizedProjects.filter(
     (p) => p.status !== "completed"
@@ -92,11 +101,7 @@ export default function Analytics() {
       ? Math.round((completedTasks / normalizedTasks.length) * 100)
       : 0;
 
-  // You do not have time logs yet, so keep this 0 for now
   const totalHours = 0;
-
-  const billableRate = 0;
-
   const totalRevenue = normalizedInvoices
     .filter((i) => i.status === "paid")
     .reduce((sum, i) => sum + i.amount, 0);
@@ -155,7 +160,7 @@ export default function Analytics() {
       budget: p.budget,
     }));
 
-  const getMonthlyProjectData = () => {
+  const monthlyProjectData = useMemo(() => {
     const months = [];
     const now = new Date();
     const monthCount = getMonthCount(timeRange);
@@ -165,12 +170,12 @@ export default function Analytics() {
       const monthStr = date.toISOString().slice(0, 7);
       const monthName = date.toLocaleDateString("en-US", { month: "short" });
 
-      const createdProjects = normalizedProjects.filter((p) =>
-        String(p.createdAt || "").slice(0, 7) === monthStr
+      const createdProjects = normalizedProjects.filter(
+        (p) => String(p.createdAt || "").slice(0, 7) === monthStr
       ).length;
 
-      const dueProjects = normalizedProjects.filter((p) =>
-        String(p.deadline || "").slice(0, 7) === monthStr
+      const dueProjects = normalizedProjects.filter(
+        (p) => String(p.deadline || "").slice(0, 7) === monthStr
       ).length;
 
       months.push({
@@ -181,16 +186,16 @@ export default function Analytics() {
     }
 
     return months;
-  };
+  }, [normalizedProjects, timeRange]);
 
   if (loading) {
     return (
       <div className="p-6 lg:p-8">
         <div className="animate-pulse space-y-6">
-          <div className="h-8 bg-slate-200 rounded w-48" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="h-8 w-48 rounded bg-slate-200" />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
             {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="h-24 bg-slate-200 rounded-xl" />
+              <div key={i} className="h-24 rounded-xl bg-slate-200" />
             ))}
           </div>
         </div>
@@ -199,8 +204,8 @@ export default function Analytics() {
   }
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-6 p-6 lg:p-8">
+      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Analytics</h1>
           <p className="text-slate-500">
@@ -220,7 +225,7 @@ export default function Analytics() {
         </select>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <StatsCard
           title="Active Projects"
           value={activeProjects}
@@ -258,12 +263,12 @@ export default function Analytics() {
         />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <h3 className="font-semibold text-slate-800 mb-4">Project Activity</h3>
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <div className="rounded-xl border border-slate-200 bg-white p-6">
+          <h3 className="mb-4 font-semibold text-slate-800">Project Activity</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={getMonthlyProjectData()}>
+              <BarChart data={monthlyProjectData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
                 <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="#94A3B8" />
                 <YAxis tick={{ fontSize: 12 }} stroke="#94A3B8" />
@@ -276,8 +281,8 @@ export default function Analytics() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <h3 className="font-semibold text-slate-800 mb-4">Project Status</h3>
+        <div className="rounded-xl border border-slate-200 bg-white p-6">
+          <h3 className="mb-4 font-semibold text-slate-800">Project Status</h3>
           <div className="h-64">
             {projectStatusData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -303,7 +308,7 @@ export default function Analytics() {
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-full flex items-center justify-center text-slate-500">
+              <div className="flex h-full items-center justify-center text-slate-500">
                 No project data yet
               </div>
             )}
@@ -311,10 +316,10 @@ export default function Analytics() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <h3 className="font-semibold text-slate-800 mb-4">Budget by Project</h3>
-          <div className="h-64 flex items-center justify-center text-slate-500">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <div className="rounded-xl border border-slate-200 bg-white p-6">
+          <h3 className="mb-4 font-semibold text-slate-800">Budget by Project</h3>
+          <div className="flex h-64 items-center justify-center text-slate-500">
             {budgetByProjectData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={budgetByProjectData}>
@@ -331,8 +336,8 @@ export default function Analytics() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <h3 className="font-semibold text-slate-800 mb-4">
+        <div className="rounded-xl border border-slate-200 bg-white p-6">
+          <h3 className="mb-4 font-semibold text-slate-800">
             Task Priority Distribution
           </h3>
           <div className="h-64">
@@ -354,7 +359,7 @@ export default function Analytics() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-full flex items-center justify-center text-slate-500">
+              <div className="flex h-full items-center justify-center text-slate-500">
                 No task data yet
               </div>
             )}

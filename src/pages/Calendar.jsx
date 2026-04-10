@@ -11,6 +11,8 @@ import {
 } from "date-fns";
 import { ChevronLeft, ChevronRight, Clock } from "lucide-react";
 import { cn } from "../lib/utils";
+import { fetchTasks } from "../api/tasks";
+import { fetchProjects } from "../api/projects";
 
 const eventColors = {
   deadline: "bg-blue-500",
@@ -31,49 +33,19 @@ export default function CalendarPage() {
 
   const loadData = async () => {
     try {
-      const mockTasks = [
-        {
-          id: 1,
-          title: "Submit PRS",
-          due_date: "2026-04-10",
-          status: "in_progress",
-          priority: "high",
-        },
-        {
-          id: 2,
-          title: "Review BOQ",
-          due_date: "2026-04-14",
-          status: "todo",
-          priority: "medium",
-        },
-        {
-          id: 3,
-          title: "Finalize inverter specs",
-          due_date: "2026-04-18",
-          status: "review",
-          priority: "low",
-        },
-      ];
+      setLoading(true);
 
-      const mockProjects = [
-        {
-          id: 1,
-          name: "Solar Installation",
-          start_date: "2026-04-08",
-          deadline: "2026-04-25",
-        },
-        {
-          id: 2,
-          name: "Warehouse Upgrade",
-          start_date: "2026-04-12",
-          deadline: "2026-04-28",
-        },
-      ];
+      const [tasksData, projectsData] = await Promise.all([
+        fetchTasks(),
+        fetchProjects(),
+      ]);
 
-      setTasks(mockTasks);
-      setProjects(mockProjects);
+      setTasks(Array.isArray(tasksData) ? tasksData : []);
+      setProjects(Array.isArray(projectsData) ? projectsData : []);
     } catch (error) {
-      console.error(error);
+      console.error("Failed to load calendar data:", error);
+      setTasks([]);
+      setProjects([]);
     } finally {
       setLoading(false);
     }
@@ -93,7 +65,7 @@ export default function CalendarPage() {
     const events = [];
 
     tasks.forEach((task) => {
-      if (task.due_date === dateStr) {
+      if (task.dueDate === dateStr) {
         events.push({
           type: task.priority === "high" ? "high" : "deadline",
           title: task.title,
@@ -111,7 +83,7 @@ export default function CalendarPage() {
         });
       }
 
-      if (project.start_date === dateStr) {
+      if (project.startDate === dateStr) {
         events.push({
           type: "start",
           title: project.name,
@@ -126,8 +98,8 @@ export default function CalendarPage() {
   const selectedDateEvents = getEventsForDate(selectedDate);
 
   const upcomingDeadlines = tasks
-    .filter((task) => task.due_date && task.status !== "completed")
-    .sort((a, b) => new Date(a.due_date) - new Date(b.due_date))
+    .filter((task) => task.dueDate && task.status !== "completed")
+    .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
     .slice(0, 5);
 
   if (loading) {
@@ -296,7 +268,7 @@ export default function CalendarPage() {
                         {task.title}
                       </p>
                       <p className="text-xs text-slate-500">
-                        {format(new Date(task.due_date), "MMM d, yyyy")}
+                        {format(new Date(task.dueDate), "MMM d, yyyy")}
                       </p>
                     </div>
                   </div>

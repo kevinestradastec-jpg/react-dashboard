@@ -35,10 +35,8 @@ export default function Layout({ children, currentPageName }) {
     { name: "Dashboard", icon: LayoutDashboard, page: "Dashboard" },
     { name: "Projects", icon: FolderKanban, page: "Projects" },
     { name: "Tasks", icon: CheckSquare, page: "Tasks" },
-    { name: "Clients", icon: Users, page: "Clients" },
-    { name: "Invoices", icon: FileText, page: "Invoices" },
-    { name: "Analytics", icon: BarChart3, page: "Analytics" },
     { name: "Calendar", icon: Calendar, page: "Calendar" },
+    { name: "Analytics", icon: BarChart3, page: "Analytics" },
   ];
 
   const budgetItems = [
@@ -81,12 +79,6 @@ export default function Layout({ children, currentPageName }) {
       icon: CheckSquare,
       page: "Tasks",
       color: "bg-emerald-500 hover:bg-emerald-600",
-    },
-    {
-      name: "New Client",
-      icon: Users,
-      page: "Clients",
-      color: "bg-orange-500 hover:bg-orange-600",
     },
   ];
 

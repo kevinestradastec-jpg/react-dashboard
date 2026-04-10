@@ -4,9 +4,8 @@ import Dashboard from "./pages/Dashboard";
 import Analytics from "./pages/Analytics";
 import Projects from "./pages/Projects";
 import Tasks from "./pages/Tasks";
-import Clients from "./pages/Clients";
-import Invoices from "./pages/Invoices";
 import Calendar from "./pages/Calendar";
+import BillOfQuantities from "./pages/BillofQuantities";
 
 function PageNotFound() {
   return <div className="p-6">404 - Page Not Found</div>;
@@ -29,22 +28,6 @@ function App() {
           element={
             <Layout currentPageName="Dashboard">
               <Dashboard />
-            </Layout>
-          }
-        />
-        <Route
-          path="/Clients"
-          element={
-            <Layout currentPageName="Clients">
-              <Clients />
-            </Layout>
-          }
-        />
-        <Route
-          path="/Invoices"
-          element={
-            <Layout currentPageName="Invoices">
-              <Invoices />
             </Layout>
           }
         />
@@ -77,6 +60,14 @@ function App() {
           element={
             <Layout currentPageName="Calendar">
               <Calendar />
+            </Layout>
+          }
+        />
+        <Route
+          path="/BillofQuantities"
+          element={
+            <Layout currentPageName="BillofQuantities">
+              <BillOfQuantities />
             </Layout>
           }
         />

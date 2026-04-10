@@ -1,8 +1,25 @@
 import React, { useEffect, useState } from "react";
-import { supabase } from "../lib/supabase";
+import {
+  fetchProjects,
+  createProject,
+  deleteProject,
+} from "../api/projects";
 import ProjectCard from "../components/projects/ProjectCard";
 
 const statusFilters = ["All", "Creating", "Active", "Completed"];
+
+const initialFormState = {
+  ProjectName: "",
+  ProjectDescription: "",
+  projectType: "",
+  ClientId: "",
+  ClientName: "",
+  Status: "Creating",
+  StartDate: "",
+  Deadline: "",
+  Budget: "",
+  CreatedByEmail: "",
+};
 
 export default function Projects() {
   const [projects, setProjects] = useState([]);
@@ -10,18 +27,7 @@ export default function Projects() {
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("All");
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({
-    ProjectName: "",
-    ProjectDescription: "",
-    projectType: "",
-    ClientId: "",
-    ClientName: "",
-    Status: "Creating",
-    StartDate: "",
-    Deadline: "",
-    Budget: "",
-    CreatedByEmail: "",
-  });
+  const [form, setForm] = useState(initialFormState);
 
   useEffect(() => {
     loadProjects();
@@ -30,33 +36,8 @@ export default function Projects() {
   const loadProjects = async () => {
     try {
       setLoading(true);
-
-      const { data, error } = await supabase
-        .from("projects")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        throw error;
-      }
-
-      const mapped = Array.isArray(data)
-        ? data.map((project) => ({
-            id: project.id || "",
-            name: project.project_name || "Untitled Project",
-            description: project.project_description || "",
-            projectType: project.project_type || "",
-            clientId: project.client_id || "",
-            clientName: project.client_name || "",
-            status: project.status || "",
-            startDate: project.start_date || "",
-            deadline: project.deadline || "",
-            budget: Number(project.budget || 0),
-            raw: project,
-          }))
-        : [];
-
-      setProjects(mapped);
+      const data = await fetchProjects();
+      setProjects(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("Failed to load projects:", error);
       setProjects([]);
@@ -69,42 +50,12 @@ export default function Projects() {
     e.preventDefault();
 
     try {
-      const { error } = await supabase.from("projects").insert([
-        {
-          project_name: form.ProjectName,
-          project_description: form.ProjectDescription,
-          project_type: form.projectType,
-          client_id: form.ClientId || null,
-          client_name: form.ClientName,
-          status: form.Status,
-          start_date: form.StartDate || null,
-          deadline: form.Deadline || null,
-          budget: form.Budget ? Number(form.Budget) : 0,
-          created_by_email: form.CreatedByEmail || null,
-        },
-      ]);
-
-      if (error) {
-        throw error;
-      }
-
+      await createProject(form);
       setShowForm(false);
-      setForm({
-        ProjectName: "",
-        ProjectDescription: "",
-        projectType: "",
-        ClientId: "",
-        ClientName: "",
-        Status: "Creating",
-        StartDate: "",
-        Deadline: "",
-        Budget: "",
-        CreatedByEmail: "",
-      });
-
+      setForm(initialFormState);
       await loadProjects();
     } catch (error) {
-      console.error(error);
+      console.error("Failed to create project:", error);
       alert("Failed to create project.");
     }
   };
@@ -114,27 +65,24 @@ export default function Projects() {
     if (!confirmed) return;
 
     try {
-      const { error } = await supabase
-        .from("projects")
-        .delete()
-        .eq("id", projectId);
-
-      if (error) {
-        throw error;
-      }
-
+      await deleteProject(projectId);
       await loadProjects();
     } catch (error) {
-      console.error(error);
+      console.error("Failed to delete project:", error);
       alert("Failed to delete project.");
     }
   };
 
   const filteredProjects = projects.filter((project) => {
+    const name = String(project.name || "").toLowerCase();
+    const description = String(project.description || "").toLowerCase();
+    const clientName = String(project.clientName || "").toLowerCase();
+    const searchValue = search.toLowerCase();
+
     const matchesSearch =
-      project.name.toLowerCase().includes(search.toLowerCase()) ||
-      project.description.toLowerCase().includes(search.toLowerCase()) ||
-      project.clientName.toLowerCase().includes(search.toLowerCase());
+      name.includes(searchValue) ||
+      description.includes(searchValue) ||
+      clientName.includes(searchValue);
 
     const matchesFilter =
       activeFilter === "All" || project.status === activeFilter;
@@ -147,7 +95,7 @@ export default function Projects() {
       <div className="p-6 lg:p-8">
         <div className="animate-pulse space-y-4">
           <div className="h-8 w-40 rounded bg-slate-200" />
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {[1, 2, 3].map((i) => (
               <div key={i} className="h-40 rounded-xl bg-slate-200" />
             ))}
@@ -158,8 +106,8 @@ export default function Projects() {
   }
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-6 p-6 lg:p-8">
+      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Projects</h1>
           <p className="text-slate-500">Manage and monitor all projects</p>
@@ -173,13 +121,13 @@ export default function Projects() {
         </button>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-3">
+      <div className="flex flex-col gap-3 md:flex-row">
         <input
           type="text"
           placeholder="Search projects..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full md:max-w-md rounded-lg border border-slate-300 px-3 py-2"
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 md:max-w-md"
         />
 
         <div className="flex flex-wrap gap-2">
@@ -204,10 +152,11 @@ export default function Projects() {
           No projects found.
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filteredProjects.map((project) => (
             <div key={project.id} className="relative">
               <ProjectCard project={project} />
+
               <button
                 onClick={() => handleDeleteProject(project.id, project.name)}
                 className="absolute right-3 top-3 rounded-md bg-red-500 px-3 py-1 text-xs text-white hover:bg-red-600"
@@ -223,7 +172,9 @@ export default function Projects() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-2xl rounded-xl bg-white p-6 shadow-xl">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-slate-800">New Project</h2>
+              <h2 className="text-xl font-semibold text-slate-800">
+                New Project
+              </h2>
               <button
                 onClick={() => setShowForm(false)}
                 className="text-slate-500 hover:text-slate-700"
@@ -254,7 +205,7 @@ export default function Projects() {
                 rows={3}
               />
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <input
                   type="text"
                   placeholder="Project Type"
@@ -319,11 +270,15 @@ export default function Projects() {
               <div className="flex justify-end gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => setShowForm(false)}
+                  onClick={() => {
+                    setShowForm(false);
+                    setForm(initialFormState);
+                  }}
                   className="rounded-lg border border-slate-300 px-4 py-2 text-slate-700"
                 >
                   Cancel
                 </button>
+
                 <button
                   type="submit"
                   className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"

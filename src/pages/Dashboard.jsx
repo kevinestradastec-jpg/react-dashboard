@@ -9,11 +9,18 @@ import {
 } from "lucide-react";
 
 import StatsCard from "../components/dashboard/StatsCard";
-import ProjectList from "../components/dashboard/ProjectList";
-import { fetchProjects } from "../api/api"; // adjust path if needed
+import { getDashboardStats } from "../api/dashboard";
 
 export default function Dashboard() {
-  const [projects, setProjects] = useState([]);
+  const [stats, setStats] = useState({
+    totalProjects: 0,
+    activeProjects: 0,
+    completedProjects: 0,
+    creatingProjects: 0,
+    totalBudget: 0,
+    upcomingDeadlines: [],
+    recentProjects: [],
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,45 +29,39 @@ export default function Dashboard() {
 
   const loadData = async () => {
     try {
-      const data = await fetchProjects();
-      setProjects(Array.isArray(data) ? data : []);
+      setLoading(true);
+      const data = await getDashboardStats();
+      setStats({
+        totalProjects: data.totalProjects || 0,
+        activeProjects: data.activeProjects || 0,
+        completedProjects: data.completedProjects || 0,
+        creatingProjects: data.creatingProjects || 0,
+        totalBudget: data.totalBudget || 0,
+        upcomingDeadlines: data.upcomingDeadlines || [],
+        recentProjects: data.recentProjects || [],
+      });
     } catch (error) {
       console.error("Failed to load dashboard data:", error);
-      setProjects([]);
+      setStats({
+        totalProjects: 0,
+        activeProjects: 0,
+        completedProjects: 0,
+        creatingProjects: 0,
+        totalBudget: 0,
+        upcomingDeadlines: [],
+        recentProjects: [],
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  const activeProjects = projects.filter(
-    (project) => String(project.Status || "").toLowerCase() === "active"
-  );
-
-  const creatingProjects = projects.filter(
-    (project) => String(project.Status || "").toLowerCase() === "creating"
-  );
-
-  const today = new Date().toISOString().split("T")[0];
-
-  const dueTodayProjects = projects.filter((project) => {
-    if (!project.Deadline) return false;
-
-    const deadline = String(project.Deadline).split("T")[0];
+  const dueTodayProjects = stats.upcomingDeadlines.filter((project) => {
+    if (!project.deadline) return false;
+    const today = new Date().toISOString().split("T")[0];
+    const deadline = String(project.deadline).split("T")[0];
     return deadline === today;
   });
-
-  const totalBudget = projects.reduce((sum, project) => {
-    return sum + Number(project.Budget || 0);
-  }, 0);
-
-  const mappedProjects = activeProjects.map((project) => ({
-    id: project.ProjectId,
-    name: project.ProjectName,
-    status: mapProjectStatus(project.Status),
-    client_id: project.ClientName || project.ClientId || "-",
-    deadline: project.Deadline || "",
-    budget: project.Budget || 0,
-  }));
 
   if (loading) {
     return (
@@ -98,8 +99,8 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard
           title="Active Projects"
-          value={`${activeProjects.length} / ${projects.length}`}
-          subtitle={`${projects.length} total`}
+          value={`${stats.activeProjects} / ${stats.totalProjects}`}
+          subtitle={`${stats.totalProjects} total`}
           icon={FolderKanban}
           iconBg="bg-blue-100"
           iconColor="text-blue-600"
@@ -107,7 +108,7 @@ export default function Dashboard() {
 
         <StatsCard
           title="Creating Projects"
-          value={creatingProjects.length}
+          value={stats.creatingProjects}
           subtitle="Still being prepared"
           icon={Clock}
           iconBg="bg-amber-100"
@@ -125,7 +126,7 @@ export default function Dashboard() {
 
         <StatsCard
           title="Total Budget"
-          value={formatCurrency(totalBudget)}
+          value={formatCurrency(stats.totalBudget)}
           subtitle="All listed projects"
           icon={Wallet}
           iconBg="bg-purple-100"
@@ -138,7 +139,7 @@ export default function Dashboard() {
           <div className="bg-white rounded-xl border border-slate-200 p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-slate-800">
-                Active Projects
+                Recent Projects
               </h2>
               <Link
                 to="/Projects"
@@ -149,24 +150,24 @@ export default function Dashboard() {
             </div>
 
             <div className="space-y-3">
-              {mappedProjects.length > 0 ? (
-                mappedProjects.map((project) => (
+              {stats.recentProjects.length > 0 ? (
+                stats.recentProjects.map((project) => (
                   <div
                     key={project.id}
                     className="flex items-center justify-between rounded-lg border border-slate-200 p-4"
                   >
                     <div>
                       <div className="font-medium text-slate-800">
-                        {project.name}
+                        {project.project_name || project.name || "Untitled Project"}
                       </div>
                       <div className="text-sm text-slate-500">
-                        {project.client_id}
+                        {project.client_name || project.client_id || "-"}
                       </div>
                     </div>
 
                     <div className="text-right">
                       <div className="text-sm font-medium text-slate-700">
-                        {project.status}
+                        {mapProjectStatus(project.status)}
                       </div>
                       <div className="text-xs text-slate-500">
                         {project.deadline
@@ -178,7 +179,7 @@ export default function Dashboard() {
                 ))
               ) : (
                 <div className="text-sm text-slate-500">
-                  No active projects found.
+                  No recent projects found.
                 </div>
               )}
             </div>
@@ -192,29 +193,21 @@ export default function Dashboard() {
             </h2>
 
             <div className="space-y-3">
-              {projects
-                .filter((project) => project.Deadline)
-                .sort(
-                  (a, b) =>
-                    new Date(a.Deadline).getTime() -
-                    new Date(b.Deadline).getTime()
-                )
-                .slice(0, 5)
-                .map((project) => (
+              {stats.upcomingDeadlines.length > 0 ? (
+                stats.upcomingDeadlines.map((project) => (
                   <div
-                    key={project.ProjectId}
+                    key={project.id}
                     className="rounded-lg border border-slate-200 p-3"
                   >
                     <div className="font-medium text-slate-800">
-                      {project.ProjectName}
+                      {project.project_name || project.name || "Untitled Project"}
                     </div>
                     <div className="text-sm text-slate-500">
-                      {formatDate(project.Deadline)}
+                      {formatDate(project.deadline)}
                     </div>
                   </div>
-                ))}
-
-              {projects.filter((project) => project.Deadline).length === 0 && (
+                ))
+              ) : (
                 <div className="text-sm text-slate-500">
                   No deadlines available.
                 </div>
@@ -230,17 +223,21 @@ export default function Dashboard() {
             <div className="space-y-2 text-sm text-slate-600">
               <div className="flex justify-between">
                 <span>Total Projects</span>
-                <span className="font-medium">{projects.length}</span>
+                <span className="font-medium">{stats.totalProjects}</span>
               </div>
               <div className="flex justify-between">
-                <span>With Budget</span>
-                <span className="font-medium">
-                  {projects.filter((p) => Number(p.Budget || 0) > 0).length}
-                </span>
+                <span>Active</span>
+                <span className="font-medium">{stats.activeProjects}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Completed</span>
+                <span className="font-medium">{stats.completedProjects}</span>
               </div>
               <div className="flex justify-between">
                 <span>Total Budget</span>
-                <span className="font-medium">{formatCurrency(totalBudget)}</span>
+                <span className="font-medium">
+                  {formatCurrency(stats.totalBudget)}
+                </span>
               </div>
             </div>
           </div>

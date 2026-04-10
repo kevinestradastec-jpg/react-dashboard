@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { fetchProjects, createProject, deleteProject } from "../api/api";
+import { supabase } from "../lib/supabase";
 import ProjectCard from "../components/projects/ProjectCard";
 
 const statusFilters = ["All", "Creating", "Active", "Completed"];
@@ -30,20 +30,28 @@ export default function Projects() {
   const loadProjects = async () => {
     try {
       setLoading(true);
-      const data = await fetchProjects();
+
+      const { data, error } = await supabase
+        .from("projects")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        throw error;
+      }
 
       const mapped = Array.isArray(data)
         ? data.map((project) => ({
-            id: project.ProjectId || "",
-            name: project.ProjectName || "Untitled Project",
-            description: project.ProjectDescription || "",
-            projectType: project.projectType || "",
-            clientId: project.ClientId || "",
-            clientName: project.ClientName || "",
-            status: project.Status || "",
-            startDate: project.StartDate || "",
-            deadline: project.Deadline || "",
-            budget: Number(project.Budget || 0),
+            id: project.id || "",
+            name: project.project_name || "Untitled Project",
+            description: project.project_description || "",
+            projectType: project.project_type || "",
+            clientId: project.client_id || "",
+            clientName: project.client_name || "",
+            status: project.status || "",
+            startDate: project.start_date || "",
+            deadline: project.deadline || "",
+            budget: Number(project.budget || 0),
             raw: project,
           }))
         : [];
@@ -61,11 +69,23 @@ export default function Projects() {
     e.preventDefault();
 
     try {
-      const result = await createProject(form);
+      const { error } = await supabase.from("projects").insert([
+        {
+          project_name: form.ProjectName,
+          project_description: form.ProjectDescription,
+          project_type: form.projectType,
+          client_id: form.ClientId || null,
+          client_name: form.ClientName,
+          status: form.Status,
+          start_date: form.StartDate || null,
+          deadline: form.Deadline || null,
+          budget: form.Budget ? Number(form.Budget) : 0,
+          created_by_email: form.CreatedByEmail || null,
+        },
+      ]);
 
-      if (result.error) {
-        alert(result.message || "Failed to create project.");
-        return;
+      if (error) {
+        throw error;
       }
 
       setShowForm(false);
@@ -90,18 +110,17 @@ export default function Projects() {
   };
 
   const handleDeleteProject = async (projectId, projectName) => {
-    const confirmed = window.confirm(
-      `Delete project "${projectName}"?`
-    );
-
+    const confirmed = window.confirm(`Delete project "${projectName}"?`);
     if (!confirmed) return;
 
     try {
-      const result = await deleteProject(projectId);
+      const { error } = await supabase
+        .from("projects")
+        .delete()
+        .eq("id", projectId);
 
-      if (result.error) {
-        alert(result.message || "Failed to delete project.");
-        return;
+      if (error) {
+        throw error;
       }
 
       await loadProjects();
@@ -189,7 +208,6 @@ export default function Projects() {
           {filteredProjects.map((project) => (
             <div key={project.id} className="relative">
               <ProjectCard project={project} />
-
               <button
                 onClick={() => handleDeleteProject(project.id, project.name)}
                 className="absolute right-3 top-3 rounded-md bg-red-500 px-3 py-1 text-xs text-white hover:bg-red-600"
